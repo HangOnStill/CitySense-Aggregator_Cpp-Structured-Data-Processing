@@ -1,6 +1,6 @@
 # CitySense
 
-[![C++ CI](https://github.com/HangOnStill/citysense-group-project/actions/workflows/ci.yml/badge.svg)](https://github.com/HangOnStill/citysense-group-project/actions/workflows/ci.yml)
+[![C++ CI](https://github.com/HangOnStill/CitySense-Aggregator_Cpp-Structured-Data-Processing/actions/workflows/ci.yml/badge.svg)](https://github.com/HangOnStill/CitySense-Aggregator_Cpp-Structured-Data-Processing/actions/workflows/ci.yml)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg)](https://isocpp.org/)
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C.svg)](https://cmake.org/)
 
