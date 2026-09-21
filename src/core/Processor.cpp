@@ -1,22 +1,24 @@
 #include "Processor.hpp"
 #include <algorithm>
+#include <stdexcept>
 
 using namespace std;
 
 namespace core {
 
-// TODO: Implement process_batch()
-// This is the main function that processes all records
-// For each record:
-//   1. Increment diag_.total_records counter
-//   2. Check if it passes filters (call passes_filters())
-//   3. If filtered out, continue to next record
-//   4. Apply transformations (call apply_transformations())
-//   5. Get the bucket start time (call get_bucket_start())
-//   6. Create BucketKey with bucket_start and zone_id
-//   7. Get reference to bucket in buckets_ map
-//   8. Add each metric value (if present) to appropriate bucket vector
-//   9. Increment diag_.processed counter
+Processor::Processor(const Config& config) : config_(config) {
+    if (config_.bucket_minutes <= 0) {
+        throw std::invalid_argument("bucket_minutes must be greater than zero");
+    }
+    if (config_.rolling_window_size <= 0) {
+        throw std::invalid_argument("rolling_window_size must be greater than zero");
+    }
+    if (config_.start_time && config_.end_time &&
+        *config_.start_time > *config_.end_time) {
+        throw std::invalid_argument("start_time must not be after end_time");
+    }
+}
+
 void Processor::process_batch(const vector<model::SensorRecord>& records) {
     for(const auto& record : records){
         diag_.total_records++;
@@ -32,6 +34,7 @@ void Processor::process_batch(const vector<model::SensorRecord>& records) {
         BucketKey key{bucket_start, transformed.zone_id};
 
         auto& bucket = buckets_[key];
+        ++bucket.record_count;
         //adding each metric to bucket vectors if present
         if(transformed.speed.has_value()){
             bucket.speed_values.push_back(transformed.speed.value());
@@ -52,18 +55,6 @@ void Processor::process_batch(const vector<model::SensorRecord>& records) {
     }
 }
 
-// TODO: Implement get_bucket_stats()
-// This converts the raw bucket data into computed statistics
-// Steps:
-//   1. Create empty vector<BucketStats> results
-//   2. Loop through all buckets in buckets_ map
-//   3. For each bucket:
-//      - Create BucketStats object
-//      - Set bucket_start and zone_id from key
-//      - Calculate count (sum of all metric vector sizes)
-//      - Call compute_stats() for each metric to fill in mean/median/p90/p99
-//      - Add to results vector
-//   4. Return results
 vector<BucketStats> Processor::get_bucket_stats() const {
     vector<BucketStats> results;
 
@@ -73,12 +64,7 @@ vector<BucketStats> Processor::get_bucket_stats() const {
 
         stats.bucket_start = key.bucket_start;
         stats.zone_id = key.zone_id;
-        //calculates total sum of all metrics
-        stats.count = bucket.speed_values.size() + 
-                      bucket.flow_values.size() + 
-                      bucket.pm25_values.size() + 
-                      bucket.pm10_values.size() + 
-                      bucket.db_values.size();
+        stats.count = bucket.record_count;
 
                           if(!bucket.speed_values.empty()){
         compute_stats(bucket.speed_values,
@@ -120,29 +106,16 @@ vector<BucketStats> Processor::get_bucket_stats() const {
 
 }
 
-// TODO: Implement passes_filters()
-// Check if a record passes time and zone filters
-// Steps:
-//   1. Check time filters:
-//      - If start_time is set and record.timestamp < start_time, reject
-//      - If end_time is set and record.timestamp > end_time, reject
-//      - Increment diag_.filtered_by_time when rejecting
-//   2. Check zone filter:
-//      - If zone_filter is not empty, check if record.zone_id is in the list
-//      - Use find() to search vector
-//      - Increment diag_.filtered_by_zone when rejecting
-//   3. Return true if passes all filters
-// Note: Need const_cast to modify diag_ counters in const function
-bool Processor::passes_filters(const model::SensorRecord& record) const {
+bool Processor::passes_filters(const model::SensorRecord& record) {
     // Filter 1: Check start time
     if(config_.start_time.has_value() && record.ts < config_.start_time.value()){
-        const_cast<Diagnostics&>(diag_).filtered_out++;
+        ++diag_.filtered_out;
         return false;
     }
     
     // Filter 2: Check end time
     if(config_.end_time.has_value() && record.ts > config_.end_time.value()){
-        const_cast<Diagnostics&>(diag_).filtered_out++;
+        ++diag_.filtered_out;
         return false;
     }
     
@@ -150,7 +123,7 @@ bool Processor::passes_filters(const model::SensorRecord& record) const {
     if(!config_.zone_filter.empty()){
         bool found = find(config_.zone_filter.begin(), config_.zone_filter.end(), record.zone_id) != config_.zone_filter.end();
         if(!found){
-            const_cast<Diagnostics&>(diag_).filtered_out++;
+            ++diag_.filtered_out;
             return false;
         }
     }
@@ -159,17 +132,6 @@ bool Processor::passes_filters(const model::SensorRecord& record) const {
     return true;
 }
 
-// TODO: Implement get_bucket_start()
-// Round timestamp down to nearest bucket boundary
-// Steps:
-//   1. Convert timestamp to minutes since epoch
-//      - Use chrono::duration_cast<chrono::minutes>()
-//      - Get .count() to get the number
-//   2. Calculate bucket boundary:
-//      - Divide by bucket_minutes, then multiply back
-//      - This rounds down to nearest multiple
-//   3. Convert back to time_point using chrono::minutes
-//   4. Return the time_point
 chrono::system_clock::time_point Processor::get_bucket_start(
     const chrono::system_clock::time_point& timestamp) const {
     auto minutes_since_epoch = chrono::duration_cast<chrono::minutes>(
@@ -182,17 +144,6 @@ chrono::system_clock::time_point Processor::get_bucket_start(
     return chrono::system_clock::time_point(chrono::minutes(bucket_start_minutes));
 }
 
-// TODO: Implement apply_transformations()
-// Apply rolling averages to sensor readings
-// Steps:
-//   1. If apply_rolling_avg is false, return record unchanged
-//   2. Create a copy of the record called transformed
-//   3. Get the sensor_id from the record
-//   4. For each metric (speed, flow, pm25, pm10, db):
-//      - If the metric has a value:
-//        a. Add it to the appropriate rolling average map (e.g., speed_rolling_[sensor_id].add())
-//        b. Replace the value in transformed with get_average()
-//   5. Return the transformed record
 model::SensorRecord Processor::apply_transformations(const model::SensorRecord& record) {
     // checks if rolling averages are enabled
     if(!config_.apply_rolling_avg){
@@ -202,58 +153,41 @@ model::SensorRecord Processor::apply_transformations(const model::SensorRecord& 
 
     string sensor_id = record.sensor_id;
 
-    // processes each metric one by one
+    auto update = [&](auto& rolling, const std::optional<double>& value,
+                      std::optional<double>& output) {
+        if (!value) return;
+        auto inserted = rolling.try_emplace(
+            sensor_id, static_cast<std::size_t>(config_.rolling_window_size));
+        auto it = inserted.first;
+        it->second.add(*value);
+        output = it->second.get_average();
+    };
 
-    // speed
     if(record.speed.has_value()){
-        speed_rolling_[sensor_id].add(record.speed.value());
-        transformed.speed = speed_rolling_[sensor_id].get_average();
+        update(speed_rolling_, record.speed, transformed.speed);
     }
     //flow
     if(record.flow.has_value()){
-        flow_rolling_[sensor_id].add(record.flow.value());
-        transformed.flow = flow_rolling_[sensor_id].get_average();
+        update(flow_rolling_, record.flow, transformed.flow);
     }
     // PM2.5
     if(record.pm25.has_value()){
-        pm25_rolling_[sensor_id].add(record.pm25.value());
-        transformed.pm25 = pm25_rolling_[sensor_id].get_average();
+        update(pm25_rolling_, record.pm25, transformed.pm25);
     }
     // PM10
     if(record.pm10.has_value()){
-        pm10_rolling_[sensor_id].add(record.pm10.value());
-        transformed.pm10 = pm10_rolling_[sensor_id].get_average();
+        update(pm10_rolling_, record.pm10, transformed.pm10);
     }
 
     //Decibels (dB)
     if(record.db.has_value()){
-        db_rolling_[sensor_id].add(record.db.value());
-        transformed.db = db_rolling_[sensor_id].get_average();
+        update(db_rolling_, record.db, transformed.db);
     }
 
     return transformed;
     
 }
 
-// TODO: Implement compute_stats()
-// Calculate mean, median, p90, p99 for a vector of values
-// Steps:
-//   1. If values is empty, return (leave all optionals unset)
-//   2. Calculate mean:
-//      - Use accumulate() to sum all values
-//      - Divide by values.size()
-//      - Assign to mean parameter
-//   3. For percentiles, make a sorted copy of values
-//   4. Calculate median:
-//      - Find middle index (size / 2)
-//      - If even size, average the two middle values
-//      - If odd size, take the middle value
-//   5. Calculate p90:
-//      - Index = ceil(0.90 * size) - 1
-//      - Get value at that index
-//   6. Calculate p99:
-//      - Index = ceil(0.99 * size) - 1
-//      - Get value at that index
 void Processor::compute_stats(const vector<double>& values,
                               optional<double>& mean,
                               optional<double>& median,

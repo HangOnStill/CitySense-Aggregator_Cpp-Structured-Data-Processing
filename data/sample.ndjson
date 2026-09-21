@@ -1,0 +1,3 @@
+{"ts":1700000000,"sensor_id":"air-1","zone_id":1,"pm25":12.5,"pm10":20.1}
+not valid json
+{"ts":1700000060,"sensor_id":"noise-2","zone_id":2,"db":67.0}

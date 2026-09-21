@@ -9,10 +9,12 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <ctime>
+#include <iomanip>
 #include <initializer_list>
+#include <sstream>
 
 #include "../model/SensorRecord.hpp"
-using namespace std;
 namespace io {
 
     // Streaming CSV reader over one or more input files.
@@ -50,19 +52,24 @@ namespace io {
                         continue;
                     }
 
+                    const auto sensor_id = get_string(cols, "sensor_id", { "sensor" });
+                    const auto timestamp = get_string(cols, "timestamp", { "ts" });
+                    if (!sensor_id || !timestamp) {
+                        ++malformed_count_;
+                        continue;
+                    }
+
+                    const auto parsed_ts = parse_timestamp(*timestamp);
+                    const int zone_id = get_zone(cols, "zone_id");
+                    if (!parsed_ts || zone_id == 0) {
+                        ++malformed_count_;
+                        continue;
+                    }
+
                     model::SensorRecord rec{};
-                    rec.ts = std::chrono::system_clock::time_point{}; // no timestamp in CSV
-
-                    // sensor_id (string, case-insensitive header, with alias "sensor")
-                    if (auto s = get_string(cols, "sensor_id", { "sensor" })) {
-                        rec.sensor_id = *s;
-                    }
-                    else {
-                        rec.sensor_id.clear();
-                    }
-
-                    // zone_id (string or code, header can be "zone_id" or "zone")
-                    rec.zone_id = get_zone(cols, "zone_id");
+                    rec.ts = *parsed_ts;
+                    rec.sensor_id = *sensor_id;
+                    rec.zone_id = zone_id;
 
                     // family-specific numeric fields (optional, header-insensitive)
                     rec.speed = parse_double(cols, "speed");
@@ -119,7 +126,7 @@ namespace io {
                 // Extract just the filename part (naive, but enough here).
                 string filename = raw;
                 auto pos = raw.find_last_of("/\\");
-                if (pos != string::npos) {
+                if (pos != std::string::npos) {
                     filename = raw.substr(pos + 1);
                 }
 
@@ -182,6 +189,13 @@ namespace io {
             for (std::size_t i = 0; i < cols.size(); ++i) {
                 auto name = trim(cols[i]);
                 header_index_[to_lower(name)] = i;
+            }
+
+            if (!find_column_index("sensor_id", {"sensor"}) ||
+                !find_column_index("zone_id", {"zone"}) ||
+                !find_column_index("timestamp", {"ts"})) {
+                throw std::runtime_error(
+                    "ReaderCSV: header must include timestamp, sensor_id, and zone_id");
             }
         }
 
@@ -343,7 +357,38 @@ namespace io {
             if (!opt) {
                 return 0;
             }
+
+            try {
+                std::size_t parsed = 0;
+                const int numeric = std::stoi(*opt, &parsed);
+                if (parsed == opt->size() && numeric > 0) {
+                    return numeric;
+                }
+            }
+            catch (...) {
+                // Named zones are mapped deterministically below.
+            }
             return zone_id_for(*opt);
+        }
+
+        static std::optional<std::chrono::system_clock::time_point>
+        parse_timestamp(const std::string& value) {
+            std::tm tm{};
+            std::istringstream input(value);
+            input >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
+            if (input.fail()) return std::nullopt;
+
+            char suffix = '\0';
+            input >> suffix;
+            if (suffix != '\0' && suffix != 'Z') return std::nullopt;
+
+#if defined(_WIN32)
+            const std::time_t seconds = _mkgmtime(&tm);
+#else
+            const std::time_t seconds = timegm(&tm);
+#endif
+            if (seconds == static_cast<std::time_t>(-1)) return std::nullopt;
+            return std::chrono::system_clock::from_time_t(seconds);
         }
 
         std::optional<double> parse_double(
@@ -360,7 +405,7 @@ namespace io {
             try {
                 std::size_t pos = 0;
                 double v = std::stod(s, &pos);
-                if (pos == 0) {
+                if (pos != s.size()) {
                     return std::nullopt;
                 }
                 return v;

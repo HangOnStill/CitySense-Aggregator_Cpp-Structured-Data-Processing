@@ -10,7 +10,6 @@
 #include "Clock.hpp"
 #include "SeededRNG.hpp"
 #include "SimulatorProfile.hpp"
-#include "Checkpoint.hpp"
 #include "../model/SensorRecord.hpp"
 
 namespace sim{

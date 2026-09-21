@@ -1,13 +1,31 @@
-name: ci
-on: [push, pull_request]
+name: C++ CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: citysense-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / C++20
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -S . -B build/debug -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCITYSENSE_WARN_AS_ERR=ON
       - name: Build
-        run: cmake --build build/debug
+        run: cmake --build build --config Release --parallel
       - name: Run CTest
-        run: ctest --test-dir build/debug --output-on-failure
+        run: ctest --test-dir build --build-config Release --output-on-failure

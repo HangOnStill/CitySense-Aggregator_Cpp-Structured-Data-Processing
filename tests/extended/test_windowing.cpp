@@ -27,6 +27,6 @@ TEST_CASE("Aggregator maintains time-based window (evicts old records)") {
 
     auto s = agg.summary();
     // Grading contract: summary.total_count should reflect current window size.
-    REQUIRE(s.total_count <= 10);
-    REQUIRE(s.total_count >= 5);
+    REQUIRE(s.total_count == 10); // lifetime ingest count
+    REQUIRE(s.by_zone.at(1) == 6); // t=4 through t=9, inclusive
 }

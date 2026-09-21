@@ -78,7 +78,7 @@ public:
         bool apply_rolling_avg = true;
     };
     
-    explicit Processor(const Config& config) : config_(config) {}
+    explicit Processor(const Config& config);
     
     // Process a batch of records
     void process_batch(const vector<model::SensorRecord>& records);
@@ -120,6 +120,7 @@ private:
     };
     
     struct BucketData {
+        std::size_t record_count{0};
         vector<double> speed_values;
         vector<double> flow_values;
         vector<double> pm25_values;
@@ -130,7 +131,7 @@ private:
     map<BucketKey, BucketData> buckets_;
     
     // Helper methods
-    bool passes_filters(const model::SensorRecord& record) const;
+    bool passes_filters(const model::SensorRecord& record);
     chrono::system_clock::time_point get_bucket_start(
         const chrono::system_clock::time_point& timestamp) const;
     model::SensorRecord apply_transformations(const model::SensorRecord& record);

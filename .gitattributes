@@ -1,0 +1,13 @@
+* text=auto
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.pdf binary
+.gitignore text eol=lf
+CMakeLists.txt text eol=lf
+
+# Generated datasets should not dominate GitHub's language statistics.
+data/*_data.csv linguist-generated=true

@@ -9,6 +9,7 @@
 build/
 out/
 /build/
+/build-*/
 /out/
 /cmake-build-*/
 /CMakeFiles/
@@ -33,6 +34,10 @@ Thumbs.db
 
 # Runtime output (your app writes this)
 citysense_report.json
+summary.json
+
+# Generated datasets (small fixtures remain versioned)
+data/*_data.csv
 
 # Executables (Windows, misc)
 *.exe

@@ -6,7 +6,7 @@
 
 namespace core {
 
-    // Very small window container. Students should implement time-based eviction.
+    // Records retained by the aggregator's configured time window.
     struct Window {
         std::vector<model::SensorRecord> records;
 

@@ -11,6 +11,7 @@
 #include "sim/SeededRNG.hpp"
 #include "sim/Clock.hpp"
 #include "core/Aggregator.hpp"
+#include "export/JsonExporter.hpp"
 #include "model/SensorRecord.hpp"
 
 int main(int argc, char** argv) {
@@ -22,8 +23,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // 1-minute window (tune if required)
-    core::Aggregator agg{1};
+    core::Aggregator agg{opt.window_minutes};
     if (opt.reserve_rows > 0) {
         agg.reserve(opt.reserve_rows);
     }
@@ -98,7 +98,12 @@ int main(int argc, char** argv) {
 
             // 5. Simulation loop
             while (clock.now() < end) {
-                auto batch = sim.next_batch(static_cast<int>(opt.batch_size));
+                const auto remaining_seconds =
+                    duration_cast<seconds>(end - clock.now()).count();
+                const auto remaining_steps = static_cast<std::size_t>(
+                    (remaining_seconds + step_seconds - 1) / step_seconds);
+                const auto steps = std::min(opt.batch_size, remaining_steps);
+                auto batch = sim.next_batch(static_cast<int>(steps));
                 for (auto& rec : batch) {
                     accept_record(rec);
                 }
@@ -112,6 +117,16 @@ int main(int argc, char** argv) {
     std::cout << "Per zone:\n";
     for (auto& [zone, count] : sum.by_zone) {
         std::cout << "  zone " << zone << ": " << count << "\n";
+    }
+
+    if (opt.output_json) {
+        try {
+            export_::JsonExporter{*opt.output_json}.emit(sum);
+            std::cout << "JSON summary: " << *opt.output_json << "\n";
+        } catch (const std::exception& ex) {
+            std::cerr << "Export error: " << ex.what() << "\n";
+            return 2;
+        }
     }
 
     return 0;

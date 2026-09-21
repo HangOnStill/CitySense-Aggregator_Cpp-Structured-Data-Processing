@@ -42,7 +42,10 @@ namespace {
             "  --mode  csv|sim     ingestion from CSV files or simulator\n"
             "  --batch N           batch size for Reader/Simulator\n"
             "  --reserve N         pre-reserve N rows in aggregator/window\n"
+            "  --window-minutes N  active aggregation window (default: 5)\n"
             "  --seed N            simulator seed (when --mode sim)\n"
+            "  --hours N           simulator duration in hours (default: 24)\n"
+            "  --output-json FILE  write the final summary as JSON\n"
             "  -h, --help          show this help\n";
     }
 
@@ -87,17 +90,30 @@ namespace app {
             else if (arg == "--batch") {
                 opt.batch_size = static_cast<std::size_t>(
                     std::stoul(need_value("--batch")));
+                if (opt.batch_size == 0)
+                    throw std::runtime_error("batch size must be > 0");
             }
             else if (arg == "--reserve") {
                 opt.reserve_rows = static_cast<std::size_t>(
                     std::stoul(need_value("--reserve")));
             }
+            else if (arg == "--window-minutes") {
+                opt.window_minutes = std::stoi(need_value("--window-minutes"));
+                if (opt.window_minutes <= 0)
+                    throw std::runtime_error("window minutes must be > 0");
+            }
             else if (arg == "--seed") {
                 opt.sim_seed = std::stoi(need_value("--seed"));
-            }else if (arg == "--hours") {
+            }
+            else if (arg == "--hours") {
                 opt.sim_hours = std::stoi(need_value("--hours"));
                 if (opt.sim_hours <= 0)
                     throw std::runtime_error("sim hours must be > 0");
+            }
+            else if (arg == "--output-json") {
+                opt.output_json = need_value("--output-json");
+                if (opt.output_json->empty())
+                    throw std::runtime_error("output path must not be empty");
             }
             else {
                 throw std::runtime_error("Unknown argument: " + arg);

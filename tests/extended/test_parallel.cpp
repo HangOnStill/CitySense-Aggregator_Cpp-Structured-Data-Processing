@@ -24,9 +24,7 @@ TEST_CASE("Aggregator supports parallel zone ingestion deterministically") {
     t1.join(); t2.join();
 
     auto s = agg.summary();
-    REQUIRE(s.total_count >= 2000);
-
-    // If students fill by_zone, grading can validate stronger:
-    // REQUIRE(s.by_zone[1] == 1000);
-    // REQUIRE(s.by_zone[2] == 1000);
+    REQUIRE(s.total_count == 2000);
+    REQUIRE(s.by_zone.at(1) == 1000);
+    REQUIRE(s.by_zone.at(2) == 1000);
 }

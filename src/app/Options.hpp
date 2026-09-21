@@ -16,11 +16,12 @@ namespace app {
         IngestMode mode = IngestMode::Csv;
         std::size_t batch_size = 1000;
         std::size_t reserve_rows = 0;
+        int window_minutes = 5;
         int sim_seed = 1234;
         int sim_hours = 24;
         bool run_patterns{false};
         int  patterns_month{0};
-        // paths for outputs could go here too
+        std::optional<std::string> output_json;
     };
 
     Options parse_args(int argc, char** argv);

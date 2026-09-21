@@ -20,23 +20,18 @@ TEST_CASE("Aggregator provides stable summary contract") {
     core::Aggregator agg(/*window_minutes=*/5);
 
     const auto initial = agg.summary();
-    REQUIRE(initial.total_count >= 0);
+    REQUIRE(initial.total_count == 0);
 
     auto first_batch = make_records(/*zone=*/1, /*count=*/3);
     agg.consume(first_batch);
     const auto after_first = agg.summary();
-    REQUIRE(after_first.total_count >= 0);
-    for (const auto& [zone, count] : after_first.by_zone) {
-        (void)zone;
-        REQUIRE(count >= 0);
-    }
+    REQUIRE(after_first.total_count == 3);
+    REQUIRE(after_first.by_zone.at(1) == 3);
 
     agg.consume(make_records(/*zone=*/2, /*count=*/0));
     agg.consume(make_records(/*zone=*/2, /*count=*/2));
     const auto after_more = agg.summary();
-    REQUIRE(after_more.total_count >= 0);
-    for (const auto& [zone, count] : after_more.by_zone) {
-        (void)zone;
-        REQUIRE(count >= 0);
-    }
+    REQUIRE(after_more.total_count == 5);
+    REQUIRE(after_more.by_zone.at(1) == 3);
+    REQUIRE(after_more.by_zone.at(2) == 2);
 }
